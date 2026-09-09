@@ -11,16 +11,8 @@ use Illuminate\Support\Str;
  */
 class UserFactory extends Factory
 {
-    /**
-     * The current password being used by the factory.
-     */
     protected static ?string $password;
 
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
     public function definition(): array
     {
         return [
@@ -28,17 +20,28 @@ class UserFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
+            'role' => fake()->randomElement(['user', 'user', 'user', 'user', 'super_admin']), 
+            'avatar' => fake()->imageUrl(100, 100, 'people', true, 'avatar'),
+            'settings' => ['theme' => fake()->randomElement(['light', 'dark'])],
+            'last_active_at' => fake()->dateTimeBetween('-1 week', 'now'),
             'remember_token' => Str::random(10),
         ];
     }
 
-    /**
-     * Indicate that the model's email address should be unverified.
-     */
     public function unverified(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn(array $attributes) => [
             'email_verified_at' => null,
+        ]);
+    }
+
+    
+    public function superAdmin(): static
+    {
+        return $this->state(fn(array $attributes) => [
+            'role' => 'super_admin',
+            'name' => 'Mustafizur Rahman',
+            'email' => 'mustafijjr@gmail.com',
         ]);
     }
 }
