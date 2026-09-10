@@ -39,5 +39,9 @@ return [
         'client_secret' => env('GITHUB_CLIENT_SECRET'),
         'redirect' => env('GITHUB_REDIRECT_URI'),
     ],
+    'whatsapp' => [
+        'webhook_secret' => env('WHATSAPP_WEBHOOK_SECRET', 'super-secret-key-change-me'),
+        'gateway_url'    => env('WHATSAPP_GATEWAY_URL', 'http://localhost:5001'),
+    ],
 
 ];

@@ -169,7 +169,7 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full py-3 bg-primary text-white font-semibold rounded-lg hover:bg-opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-h-[48px]"
+                            className="w-full bg-primary text-white font-semibold rounded-lg hover:bg-opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-h-[48px]"
                         >
                             {loading ? <Loading size="sm" /> : 'Sign In'}
                         </button>
@@ -235,14 +235,14 @@ export default function LoginPage() {
                                         maxLength={6}
                                         value={otp}
                                         onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                        className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:border-transparent text-center text-2xl tracking-widest"
+                                        className="w-full px-4 py-1 border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:border-transparent text-center text-2xl tracking-widest"
                                         placeholder="enter 6-digit code"
                                     />
                                 </div>
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="w-full py-3 bg-primary text-white font-semibold rounded-lg hover:bg-opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-h-[48px]"
+                                    className="w-full bg-primary text-white font-semibold rounded-lg hover:bg-opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-h-[48px]"
                                 >
                                     {loading ? <Loading size="sm" /> : 'Verify & Create Account'}
                                 </button>

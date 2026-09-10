@@ -165,7 +165,7 @@ export default function DashboardLayout({
         <button
           onClick={handleLogout}
           disabled={loggingOut}
-          className="group flex w-full justify-center items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-secondary transition hover:bg-accent hover:text-white border border-secondary hover:border-accent hover:font-semibold disabled:opacity-50 min-h-[46px]"
+          className="group flex w-full justify-center items-center gap-3 rounded-xl px-4 text-sm font-medium text-secondary transition hover:bg-accent hover:text-white border border-secondary hover:border-accent hover:font-semibold disabled:opacity-50 min-h-[46px]"
         >
           {loggingOut ? <Loading size="sm" /> : <><FiLogOut size={19} /> <span>Logout</span></>}
         </button>

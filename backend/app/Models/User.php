@@ -34,4 +34,26 @@ class User extends Authenticatable
         'settings' => 'array',
         'password' => 'hashed',
     ];
+
+    public function channelAccounts()
+    {
+        return $this->hasMany(ChannelAccount::class);
+    }
+
+    public function contacts()
+    {
+        return $this->hasMany(Contact::class);
+    }
+
+    public function conversations()
+    {
+        return $this->hasMany(Conversation::class);
+    }
+
+    public function messages()
+    {
+        return $this->hasMany(Message::class);
+    }
+
+    
 }

@@ -1,177 +1,325 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import {
-    FiSearch,
-    FiMoreVertical,
-    FiCamera,
-    FiEdit,
-    FiChevronDown,
-    FiMessageCircle,
-    FiLock,
-} from 'react-icons/fi';
-import Loading from '@/app/components/loading/Loading';
-
-const chats = [
-    {
-        id: 1,
-        name: 'Mama',
-        lastMessage: 'https://www.facebook.com/share/v/1LWXnwW...',
-        time: 'Yesterday',
-        avatar: 'B',
-    },
-    {
-        id: 2,
-        name: "Shohan Vai (Jomidar's Son)",
-        lastMessage: 'Voice call',
-        time: 'Yesterday',
-        avatar: 'S',
-    },
-    {
-        id: 3,
-        name: '+8801614-727560(You)',
-        lastMessage: 'Photo',
-        time: 'Yesterday',
-        avatar: '+',
-    },
-    {
-        id: 5,
-        name: 'Add contact',
-        lastMessage: 'Ask Meta AI',
-        time: 'Yesterday',
-        avatar: 'A',
-    },
-    {
-        id: 6,
-        name: 'Only Us!',
-        lastMessage: 'Only Us!',
-        time: 'Yesterday',
-        avatar: 'O',
-    },
-    {
-        id: 8,
-        name: 'Emon Friend (Airtel)',
-        lastMessage: 'Voice call',
-        time: 'Monday',
-        avatar: 'E',
-    },
-    {
-        id: 9,
-        name: 'Abdur Rahman Vai (Sohoj I. T)',
-        lastMessage: 'Sunday',
-        time: 'Sunday',
-        avatar: 'A',
-    },
-    {
-        id: 10,
-        name: 'Jahid(MamatoVai)',
-        lastMessage: 'Missed voice call',
-        time: 'Sunday',
-        avatar: 'J',
-    },
-];
+import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { FaWhatsapp, FaQrcode, FaKey, FaCheckCircle, FaPlug, FaTrash } from "react-icons/fa";
+import { io, Socket } from "socket.io-client";
+import apiClient from "@/lib/axios";
+import Loading from "@/app/components/loading/Loading";
 
 export default function WhatsAppPage() {
-    const [activeFilter, setActiveFilter] = useState('All');
-    const [loading, setLoading] = useState(false);
-    const filters = ['All', 'Unread', 'Favourites', 'Groups'];
+    const router = useRouter();
+    const socketRef = useRef<Socket | null>(null);
 
-    if (loading) {
-        return (
-            <div className="flex h-screen w-full items-center justify-center">
-                <Loading size="lg" text="Loading WhatsApp Conversations..." />
-            </div>
-        );
-    }
+    const [activeMode, setActiveMode] = useState<"qr" | "official">("qr");
 
+    // QR states
+    const [qrCode, setQrCode] = useState<string | null>(null);
+    const [connectionStatus, setConnectionStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
+    const [connectedUser, setConnectedUser] = useState<{ id: string; name: string; number?: string } | null>(null);
+
+    const [booting, setBooting] = useState(true);
+    const [waitingForQR, setWaitingForQR] = useState(false);
+
+    const [officialConfig, setOfficialConfig] = useState({
+        phoneNumberId: "",
+        businessAccountId: "",
+        accessToken: "",
+    });
+    const [isOfficialSaved, setIsOfficialSaved] = useState(false);
+
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function boot() {
+            let existingAccount: any = null;
+            try {
+                const res = await apiClient.get("/channel-accounts", {
+                    params: { provider: "whatsapp" },
+                });
+                const accounts = res.data?.data || [];
+                existingAccount = accounts.find((a: any) => a.status === "connected") || null;
+            } catch (err) {
+                console.warn("Failed to fetch channel accounts", err);
+            }
+
+            let nodeStatus: any = null;
+            try {
+                const r = await fetch("http://localhost:5001/health");
+                nodeStatus = await r.json();
+            } catch (err) {
+                console.warn("Node gateway unreachable");
+            }
+
+            if (cancelled) return;
+
+            if (existingAccount && nodeStatus?.status === "connected") {
+                router.replace("/whatsApp/inbox");
+                return;
+            }
+
+            if (nodeStatus?.status === "connected" && nodeStatus.user && !existingAccount) {
+                try {
+                    await apiClient.post("/channel-accounts", {
+                        provider: "whatsapp",
+                        connection_type: "qr",
+                        account_name: nodeStatus.user.name || "WhatsApp",
+                        account_id: nodeStatus.user.number || nodeStatus.user.id,
+                        status: "connected",
+                    });
+                    router.replace("/whatsApp/inbox");
+                    return;
+                } catch (err) {
+                    console.warn("Auto-save failed", err);
+                }
+            }
+
+            setBooting(false);
+            setWaitingForQR(true);
+
+            const socket = io("http://localhost:5001", {
+                transports: ["websocket", "polling"],
+            });
+            socketRef.current = socket;
+
+            socket.on("connect", () => {
+                console.log("✅ Socket connected");
+                if (existingAccount?.id) {
+                    socket.emit("set-channel-account", existingAccount.id);
+                }
+                socket.emit("start-qr");
+            });
+
+            socket.on("qr", (payload: { qr: string }) => {
+                setQrCode(payload.qr);
+                setConnectionStatus("connecting");
+                setWaitingForQR(false);
+            });
+
+            socket.on("status", (payload: { status: "disconnected" | "connecting" | "connected" }) => {
+                setConnectionStatus(payload.status);
+                if (payload.status === "connected") {
+                    setWaitingForQR(false);
+                }
+                if (payload.status === "disconnected") {
+                    setQrCode(null);
+                }
+            });
+
+            socket.on("user", async (user: { id: string; name: string; number?: string }) => {
+                setConnectedUser(user);
+                setConnectionStatus("connected");
+                setQrCode(null);
+                setWaitingForQR(false);
+
+                try {
+                    const res = await apiClient.post("/channel-accounts", {
+                        provider: "whatsapp",
+                        connection_type: "qr",
+                        account_name: user.name || "WhatsApp",
+                        account_id: user.number || user.id,
+                        status: "connected",
+                    });
+                    const savedId = res.data?.data?.id;
+                    if (savedId && socketRef.current) {
+                        socketRef.current.emit("set-channel-account", savedId);
+                    }
+                    setTimeout(() => router.replace("/whatsApp/inbox"), 400);
+                } catch (err) {
+                    console.error("Save failed", err);
+                }
+            });
+
+            socket.on("connect_error", (err) => {
+                console.error("Socket error:", err.message);
+                setWaitingForQR(false);
+            });
+        }
+
+        boot();
+
+        return () => {
+            cancelled = true;
+            if (socketRef.current) socketRef.current.disconnect();
+        };
+    }, []);
+
+    // ==================================================
+    // 2. Official API Save
+    // ==================================================
+    const handleSaveOfficialConfig = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await apiClient.post("/channel-accounts", {
+                provider: "whatsapp",
+                connection_type: "official",
+                account_name: "WhatsApp Official API",
+                account_id: officialConfig.phoneNumberId,
+                status: "connected",
+            });
+            setIsOfficialSaved(true);
+        } catch (err) {
+            console.error("Failed to save official config", err);
+        }
+    };
+
+    // ==================================================
+    // 3. RENDER
+    // ==================================================
     return (
-        <div className="h-screen w-full flex items-center justify-center">
-            <div className="w-full max-w-[1400px] h-full shadow-lg flex rounded-lg overflow-hidden">
-
-                <div className="w-[380px] h-full border-r border-gray-200 flex flex-col flex-shrink-0">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-                        <h1 className="text-xl font-semibold text-gray-800">WhatsApp Web</h1>
-                        <div className="flex items-center gap-4">
-                            <FiCamera className="w-5 h-5 text-gray-600 cursor-pointer hover:text-gray-800" />
-                            <FiEdit className="w-5 h-5 text-gray-600 cursor-pointer hover:text-gray-800" />
-                            <FiMoreVertical className="w-5 h-5 text-gray-600 cursor-pointer hover:text-gray-800" />
-                        </div>
+        <div className="p-3 space-y-6 mx-auto">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center  p-4 shadow-sm  gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="p-3 bg-[#249D8F]/10 rounded-xl text-[#249D8F]">
+                        <FaWhatsapp className="text-3xl" />
                     </div>
-
-                    <div className="px-3 py-2">
-                        <div className="flex items-center bg-white rounded-full px-4 py-2">
-                            <FiSearch className="w-4 h-4 text-gray-500 mr-2" />
-                            <input
-                                type="text"
-                                placeholder="Search or start a new chat"
-                                className="bg-transparent outline-none text-sm flex-1 text-gray-700 placeholder-gray-400"
-                            />
-                            <FiChevronDown className="w-4 h-4 text-gray-500 ml-2" />
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 px-4 py-1 border-b border-gray-200">
-                        {filters.map((filter) => (
-                            <button
-                                key={filter}
-                                onClick={() => setActiveFilter(filter)}
-                                className={`relative py-2 text-sm font-medium transition ${activeFilter === filter
-                                        ? 'text-green-600'
-                                        : 'text-gray-500 hover:text-gray-700'
-                                    }`}
-                            >
-                                {filter}
-                                {activeFilter === filter && (
-                                    <span className="absolute bottom-0 left-0 w-full h-0.5 bg-green-600 rounded-full" />
-                                )}
-                            </button>
-                        ))}
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto">
-                        {chats.map((chat) => (
-                            <div
-                                key={chat.id}
-                                className="flex items-center px-4 py-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition"
-                            >
-                                <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center text-gray-700 font-semibold text-lg mr-3 flex-shrink-0">
-                                    {chat.avatar}
-                                </div>
-
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex justify-between items-baseline">
-                                        <h3 className="text-sm font-medium text-gray-800 truncate">
-                                            {chat.name}
-                                        </h3>
-                                        <span className="text-xs text-gray-400 ml-2 whitespace-nowrap">
-                                            {chat.time}
-                                        </span>
-                                    </div>
-                                    <p className="text-sm text-gray-500 truncate">{chat.lastMessage}</p>
-                                </div>
-                            </div>
-                        ))}
+                    <div>
+                        <h1 className="text-2xl font-bold text-[#1D2128]">WhatsApp Integration</h1>
+                        <p className="text-sm text-gray-500">
+                            Connect your WhatsApp account to start sending and receiving messages.
+                        </p>
                     </div>
                 </div>
 
-                <div className="flex-1 h-full flex flex-col items-center justify-center">
-                    <div className="text-center">
-                        <div className="flex justify-center mb-4">
-                            <div className="w-24 h-24 rounded-full bg-green-100 flex items-center justify-center">
-                                <FiMessageCircle className="w-12 h-12 text-green-600" />
-                            </div>
-                        </div>
-                        <h2 className="text-2xl font-light text-gray-700">WhatsApp Web</h2>
-                        <p className="text-sm text-gray-400 mt-2">
-                            Send and receive messages without keeping your phone online.
-                        </p>
-                        <div className="mt-4 flex items-center justify-center gap-1 text-xs text-gray-400">
-                            <FiLock className="w-3 h-3" />
-                            <span>End-to-end encrypted</span>
-                        </div>
-                    </div>
+                <div className="flex items-center p-1.5 rounded-xl border ">
+                    <button
+                        onClick={() => setActiveMode("qr")}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeMode === "qr" ? "bg-[#249D8F] text-white shadow-md" : "text-gray-600 hover:text-gray-900"
+                            }`}
+                    >
+                        <FaQrcode /> QR Scan (Web Auto)
+                    </button>
+                    <button
+                        onClick={() => setActiveMode("official")}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeMode === "official" ? "bg-[#249D8F] text-white shadow-md" : "text-gray-600 hover:text-gray-900"
+                            }`}
+                    >
+                        <FaKey /> Official Meta API
+                    </button>
                 </div>
             </div>
+
+            {activeMode === "qr" && (
+                <div className=" p-8 rounded-2xl shadow-sm border border-gray-100 min-h-[420px] flex flex-col justify-center items-center text-center">
+                    {/* Boot check */}
+                    {booting && (
+                        <Loading size="lg" text="Checking connection status..." />
+                    )}
+
+                    {!booting && waitingForQR && !qrCode && (
+                        <Loading size="lg" text="Generating QR Code, please wait..." />
+                    )}
+
+                    {!booting && qrCode && (
+                        <div className="space-y-4 animate-fade-in">
+                            <div className="p-4 bg-white border-2 border-dashed border-[#249D8F] rounded-2xl inline-block shadow-lg">
+                                <img src={qrCode} alt="WhatsApp QR Code" className="w-64 h-64 mx-auto" />
+                            </div>
+                            <p className="text-sm text-gray-600 font-medium">
+                                Open WhatsApp on your phone, go to Linked Devices, and scan this QR code to connect.
+                            </p>
+                        </div>
+                    )}
+
+                    {!booting && connectionStatus === "connected" && (
+                        <div className="space-y-4">
+                            <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto text-3xl">
+                                <FaCheckCircle />
+                            </div>
+                            <p className="text-lg font-semibold text-gray-800">
+                                Connected! Redirecting to Inbox...
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {activeMode === "official" && (
+                <div className=" p-8 rounded-2xl shadow-sm border border-gray-100">
+                    <div className="max-w-2xl mx-auto space-y-6">
+                        <div className="flex items-center gap-3  pb-4">
+                            <FaKey className="text-2xl text-[#E76F51]" />
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-800">WhatsApp Official Business Cloud API Setup</h3>
+                                <p className="text-xs text-gray-500">Enter credentials from your Meta Developer Dashboard</p>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleSaveOfficialConfig} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Phone Number ID
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="e.g. 10928374659201"
+                                    value={officialConfig.phoneNumberId}
+                                    onChange={(e) =>
+                                        setOfficialConfig({
+                                            ...officialConfig,
+                                            phoneNumberId: e.target.value
+                                        })
+                                    }
+                                    className="w-full px-4 py-2.5 rounded-xl border border-gray-300 bg-white/50 focus:bg-surface/20 focus:ring-2 focus:ring-[#249D8F] text-sm outline-none"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    WhatsApp Business Account ID
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="e.g. 98765432101234"
+                                    value={officialConfig.businessAccountId}
+                                    onChange={(e) =>
+                                        setOfficialConfig({
+                                            ...officialConfig,
+                                            businessAccountId: e.target.value
+                                        })
+                                    }
+                                    className="w-full px-4 py-2.5 rounded-xl border border-gray-300 bg-white/50 focus:bg-surface/20 focus:ring-2 focus:ring-[#249D8F] text-sm outline-none"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Permanent Access Token
+                                </label>
+                                <textarea
+                                    rows={3}
+                                    required
+                                    placeholder="EAAG..."
+                                    value={officialConfig.accessToken}
+                                    onChange={(e) =>
+                                        setOfficialConfig({
+                                            ...officialConfig,
+                                            accessToken: e.target.value
+                                        })
+                                    }
+                                    className="w-full px-4 py-2.5 rounded-xl border border-gray-300 bg-white/50 focus:bg-surface/20 focus:ring-2 focus:ring-[#249D8F] text-sm outline-none"
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                className="w-full py-3 bg-[#249D8F] hover:bg-[#1d8276] text-white rounded-xl font-semibold transition shadow-md"
+                            >
+                                Save Official API Credentials
+                            </button>
+                        </form>
+
+                        {isOfficialSaved && (
+                            <div className="p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl text-sm flex items-center gap-2">
+                                <FaCheckCircle className="text-lg" /> Official API configuration saved successfully.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

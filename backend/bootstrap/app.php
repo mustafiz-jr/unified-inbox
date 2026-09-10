@@ -12,8 +12,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+
+      
+
         $middleware->alias([
             'inactivity' => \App\Http\Middleware\CheckInactivity::class,
+        ]);
+
+        $middleware->validateCsrfTokens(except: [
+            'api/webhooks/*',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
