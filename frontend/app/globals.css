@@ -20,4 +20,16 @@
   .secondary-btn {
     @apply btn bg-secondary text-text shadow-sm hover:bg-secondary/90 hover:shadow-md focus:ring-secondary/50;
   }
+
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
 }

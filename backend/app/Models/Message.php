@@ -24,15 +24,21 @@ class Message extends Model
         'media_size',
         'status',
         'is_deleted',
+        'is_starred',
+        'deleted_for_everyone',
+        'edited_at',
         'sent_at',
     ];
 
     protected $casts = [
-        'metadata'       => 'array',
-        'sent_at'        => 'datetime',
-        'is_deleted'     => 'boolean',
-        'media_duration' => 'integer',
-        'media_size'     => 'integer',
+        'metadata'             => 'array',
+        'sent_at'              => 'datetime',
+        'edited_at'            => 'datetime',
+        'is_deleted'           => 'boolean',
+        'is_starred'           => 'boolean',
+        'deleted_for_everyone' => 'boolean',
+        'media_duration'       => 'integer',
+        'media_size'           => 'integer',
     ];
 
     public function conversation()
@@ -63,5 +69,10 @@ class Message extends Model
     public function attachments()
     {
         return $this->hasMany(Attachment::class);
+    }
+
+    public function reactions()
+    {
+        return $this->hasMany(MessageReaction::class);
     }
 }

@@ -53,4 +53,21 @@ class Conversation extends Model
     {
         return $this->hasOne(Message::class)->latestOfMany();
     }
+
+    public function scopePinned($q)
+    {
+        return $q->where('is_pinned', true);
+    }
+    public function scopeArchived($q)
+    {
+        return $q->where('is_archived', true);
+    }
+    public function scopeMuted($q)
+    {
+        return $q->where('is_muted', true);
+    }
+    public function scopeInbox($q)
+    {
+        return $q->where('is_archived', false);
+    }
 }

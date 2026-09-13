@@ -223,14 +223,7 @@ export default function WhatsAppPage() {
                     )}
 
                     {!booting && connectionStatus === "connected" && (
-                        <div className="space-y-4">
-                            <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto text-3xl">
-                                <FaCheckCircle />
-                            </div>
-                            <p className="text-lg font-semibold text-gray-800">
-                                Connected! Redirecting to Inbox...
-                            </p>
-                        </div>
+                        <Loading size="xl" text="Connected! Redirecting to Inbox..." />
                     )}
                 </div>
             )}
